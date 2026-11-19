@@ -1,0 +1,2102 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maschinencode-Editor</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════
+   Maschinencode-Editor — Stil im Notepad++-Look (helles Schema)
+   ══════════════════════════════════════════════════════════════════ */
+
+:root{
+  /* Fenster- und Bedienelemente – durchgehend weiß, Struktur nur über Rahmen */
+  --win:          #ffffff;
+  --win-dark:     #fafafa;
+  --edge:         #d8d8d8;
+  --edge-dark:    #b0b0b0;
+  --text:         #000000;
+  --text-dim:     #606060;
+  --text-faint:   #909090;
+  --sel:          #b5d5ff;
+  --sel-text:     #000000;
+  --accent:       #0078d7;
+  --accent-dark:  #316ac5;
+
+  /* Editor */
+  --editor-bg:    #ffffff;
+  --gutter-bg:    #fcfcfc;
+  --marker-bg:    #f4f4f4;
+
+  /* Syntax (angelehnt an das klassische Notepad++-Schema) */
+  --kw:           #0000c0;
+  --lbl:          #7f0055;
+  --addr:         #007070;
+  --num:          #7f007f;
+  --cmt:          #008000;
+
+  /* Terminal – durchgehend hell */
+  --term-bg:      #ffffff;
+  --term-fg:      #000000;
+  --term-fetch:   #808080;
+  --term-dec:     #0000c0;
+  --term-exec:    #007a3d;
+  --term-wb:      #7f0055;
+  --term-err:     #c00000;
+  --term-warn:    #9a6b00;
+  --term-hint:    #606060;
+
+  --font-ui:      "Segoe UI", Ubuntu, "DejaVu Sans", system-ui, sans-serif;
+  --font-code:    "JetBrains Mono", "Fira Code", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+  --code-size:    14px;
+  --code-line:    21px;
+  --code-pad-x:   14px;
+  --code-pad-y:   8px;
+}
+
+*{ box-sizing:border-box; }
+[hidden]{ display:none !important; }
+
+html,body{
+  height:100%; margin:0;
+  background:var(--win); color:var(--text);
+  font-family:var(--font-ui); font-size:13px;
+  overflow:hidden;
+}
+body{ display:flex; flex-direction:column; }
+
+/* ══════════ Tabs (Notepad++-Stil) ══════════ */
+
+.tabbar{
+  display:flex; align-items:flex-end; gap:0;
+  background:var(--win-dark); padding:3px 0 0 4px;
+  border-bottom:1px solid var(--edge);
+  overflow-x:auto; flex:0 0 auto; user-select:none;
+}
+.tab{
+  display:flex; align-items:center; gap:7px;
+  padding:5px 8px 5px 9px; cursor:pointer; white-space:nowrap;
+  background:#f5f5f5; color:var(--text-dim);
+  border:1px solid var(--edge); border-bottom:none;
+  border-radius:3px 3px 0 0; margin-right:1px;
+  position:relative; top:1px;
+}
+.tab:hover{ background:#fafafa; }
+.tab.active{
+  background:var(--editor-bg); color:var(--text);
+  top:0; padding-bottom:6px;
+  box-shadow:inset 0 2px 0 var(--accent);
+}
+.tab .ico{
+  width:12px; height:14px; flex:0 0 auto;
+  background:#fff; border:1px solid #a0a0a0; border-radius:1px;
+  position:relative;
+}
+.tab .ico::after{
+  content:""; position:absolute; inset:1px 1px auto 1px; height:3px;
+  background:#d0d0d0; box-shadow:0 4px 0 #d0d0d0;
+}
+.tab.dirty .ico{ border-color:#c05050; }
+.tab.dirty .ico::after{ background:#e05a5a; box-shadow:0 4px 0 #e05a5a; }
+.tab .name{ font-size:12.5px; }
+.tab .close{
+  width:16px; height:16px; border-radius:2px; line-height:1;
+  display:inline-flex; align-items:center; justify-content:center;
+  color:var(--text-faint); font-size:12px; margin-left:2px;
+}
+.tab .close:hover{ background:#c05050; color:#fff; }
+
+/* "+"-Button für einen neuen Tab */
+.tab-new{
+  align-self:center; margin:0 2px 0 4px;
+  width:20px; height:20px; line-height:1;
+  background:transparent; border:1px solid transparent; border-radius:3px;
+  color:var(--text-dim); font-size:15px; cursor:pointer;
+  font-family:var(--font-ui);
+}
+.tab-new:hover{ background:#fff; border-color:var(--edge-dark); color:var(--accent-dark); }
+
+/* Inline-Umbenennen eines Tabs */
+.tab .rename{
+  width:110px; font:12.5px var(--font-ui);
+  border:1px solid var(--accent); border-radius:2px;
+  padding:0 3px; color:var(--text); background:#fff;
+}
+.tab .rename:focus{ outline:none; }
+
+/* ══════════ Editor ══════════ */
+
+.main{ display:flex; flex:1 1 auto; min-height:0; }
+.editor-col{ flex:1 1 auto; min-width:0; display:flex; }
+.editor-wrap{ display:flex; flex:1 1 auto; min-width:0; overflow:hidden; background:var(--editor-bg); }
+
+/* Gutter mit Marker-Spalte (Notepad++-Änderungsmarkierungen) */
+.gutter{
+  flex:0 0 auto; overflow:hidden;
+  background:var(--gutter-bg); color:var(--text-faint);
+  border-right:1px solid var(--edge);
+  padding:var(--code-pad-y) 10px var(--code-pad-y) 0;
+  text-align:right; user-select:none;
+  font-family:var(--font-code); font-size:var(--code-size); line-height:var(--code-line);
+}
+.gutter .ln{ height:var(--code-line); display:flex; justify-content:flex-end; align-items:center; }
+.gutter .ln.cur{ color:var(--text); }
+.gutter .mk{
+  width:16px; flex:0 0 auto; height:var(--code-line);
+  display:inline-flex; align-items:center; justify-content:center;
+}
+.gutter .mk i{
+  width:9px; height:9px; display:block;
+  border:1px solid #b04040; background:#e05a5a; border-radius:1px;
+}
+.gutter .mk.warn i{ border-color:#b08c20; background:#e8c341; }
+.gutter .mk.info i{ border-color:#2b6cb0; background:#5b9bd5; }
+
+/* Code-Bereich */
+.code-area{ position:relative; flex:1 1 auto; min-width:0; overflow:hidden; }
+.highlight, #editor{
+  margin:0;
+  padding:var(--code-pad-y) var(--code-pad-x);
+  font-family:var(--font-code);
+  font-size:var(--code-size);
+  line-height:var(--code-line);
+  tab-size:4;
+  border:0;
+  white-space:pre;
+  word-wrap:normal;
+  overflow-wrap:normal;
+}
+.highlight{
+  position:absolute; inset:0;
+  overflow:hidden; pointer-events:none;
+  color:var(--text); background:transparent;
+}
+#editor{
+  position:absolute; inset:0;
+  width:100%; height:100%;
+  overflow:auto; resize:none;
+  background:transparent; color:transparent;
+  caret-color:#000000;
+  outline:none;
+}
+#editor::selection{ background:transparent; color:transparent; }
+#editor.wrap{ white-space:pre-wrap; overflow-wrap:anywhere; }
+.code-area.wrap .highlight{ white-space:pre-wrap; overflow-wrap:anywhere; }
+
+/* Syntaxfarben */
+.kw   { color:var(--kw);   font-weight:bold; }
+.lbl  { color:var(--lbl);  font-weight:bold; }
+.addr { color:var(--addr); }
+.num  { color:var(--num); }
+.cmt  { color:var(--cmt);  font-style:italic; }
+.id   { color:var(--text); }
+
+/* Hervorhebungen im Overlay: Suchtreffer und Textauswahl.
+   Die Auswahl wird hier gezeichnet statt vom Browser, damit sie exakt
+   auf der Textzeile sitzt (die native Auswahl liegt in der Textarea-Ebene
+   und würde den Text darunter verdecken). */
+.mark    { background:#ffe680; }
+.sel     { background:var(--sel); }
+.selmark { background:#ffc98a; }
+
+/* ══════════ Terminal ══════════ */
+
+.term-panel{
+  flex:0 0 auto; display:flex; flex-direction:column;
+  height:260px; min-height:120px;
+  background:var(--term-bg); border-top:1px solid var(--edge-dark);
+}
+.term-panel.hidden{ display:none; }
+
+.term-head{
+  display:flex; align-items:center; gap:6px; padding:3px 6px;
+  background:var(--term-bg); border-bottom:1px solid var(--edge); flex:0 0 auto;
+}
+.term-title{
+  font-size:11.5px; font-weight:600; color:var(--text-dim);
+  padding:0 10px 0 2px; border-right:1px solid var(--edge); margin-right:4px;
+}
+.tbtn{
+  background:#ffffff; border:1px solid var(--edge-dark); color:var(--text);
+  border-radius:2px; padding:2px 9px; cursor:pointer;
+  font-size:11.5px; font-family:var(--font-ui);
+}
+.tbtn:hover{ background:#e8f2fb; border-color:var(--accent); }
+.tbtn:active{ background:var(--accent-dark); color:#fff; }
+.speed{ display:flex; align-items:center; gap:5px; color:var(--text-dim); font-size:11.5px; }
+.speed input[type=number]{
+  width:72px; background:#fff; border:1px solid var(--edge-dark); color:var(--text);
+  border-radius:2px; padding:2px 5px; font-family:var(--font-code); font-size:11.5px;
+  text-align:right;
+}
+.speed input:focus{ outline:none; border-color:var(--accent); }
+.sim-status{ font-size:11.5px; color:var(--text-dim); }
+.sim-status.run{ color:#0b7a0b; }
+.sim-status.halt{ color:#1f5fa8; }
+.sim-status.err{ color:var(--term-err); }
+.term-err{
+  font-size:11.5px; color:#fff; background:var(--term-err);
+  border-radius:8px; padding:1px 9px; cursor:pointer;
+}
+.term-err.warn{ background:#c99a12; }
+
+.term-regs, .term-mem{
+  display:flex; flex-wrap:wrap; gap:4px 16px;
+  padding:3px 10px; background:var(--term-bg);
+  font-family:var(--font-code); font-size:11.5px; color:var(--text-dim);
+  border-bottom:1px solid #ececec; flex:0 0 auto;
+}
+.term-mem{ background:var(--term-bg); }
+.term-regs b, .term-mem b{ color:var(--text); font-weight:600; }
+.term-regs .v, .term-mem .v{ color:#0b5fa5; }
+.term-mem .chg{ color:#b06000; font-weight:bold; }
+
+.term-console{
+  flex:1 1 auto; overflow:auto;
+  background:var(--term-bg); color:var(--term-fg);
+  font-family:var(--font-code); font-size:12px; line-height:1.5;
+  padding:6px 12px; white-space:pre-wrap;
+}
+.term-console .tr-fetch{ color:var(--term-fetch); }
+.term-console .tr-dec{   color:var(--term-dec); }
+.term-console .tr-exec{  color:var(--term-exec); }
+.term-console .tr-wb{    color:var(--term-wb); }
+.term-console .tr-err{   color:var(--term-err); }
+.term-console .tr-warn{  color:#e5c07b; }
+.term-console .tr-hint{  color:#6a9fb5; }
+.term-console .tr-cmd{   color:#7fdfff; }
+
+/* ══════════ Statusleiste ══════════ */
+
+.statusbar{
+  display:flex; align-items:center; gap:0;
+  padding:2px 8px; background:var(--win);
+  border-top:1px solid var(--edge);
+  color:var(--text-dim); font-size:11.5px;
+  flex:0 0 auto; user-select:none;
+}
+.statusbar > span{ padding:0 10px; }
+.statusbar > span:first-child{ padding-left:2px; }
+.st-sep{ border-left:1px solid var(--edge); }
+.st-ok{ color:#0b7a0b; }
+.st-warn{ color:#b07d00; }
+.st-err{ color:var(--term-err); }
+.tb-spacer{ flex:1 1 auto; }
+
+/* ══════════ Suchleiste ══════════ */
+
+.findbar{
+  display:flex; align-items:center; gap:6px;
+  padding:5px 8px; background:var(--win);
+  border-bottom:1px solid var(--edge); flex:0 0 auto;
+}
+.findbar input[type=text]{
+  background:#fff; border:1px solid var(--edge-dark); color:var(--text);
+  border-radius:2px; padding:3px 6px; font-family:var(--font-code); font-size:12px;
+}
+.findbar input[type=number]{ width:80px; }
+.findbar input:focus{ outline:none; border-color:var(--accent); }
+.chk{ display:flex; align-items:center; gap:4px; color:var(--text-dim); font-size:11.5px; }
+
+/* ══════════ Kontextmenü ══════════ */
+
+.ctxmenu{
+  position:fixed; z-index:400; min-width:230px; padding:2px;
+  background:#ffffff; border:1px solid var(--edge-dark);
+  box-shadow:2px 3px 8px rgba(0,0,0,.28);
+  font-size:12.5px;
+}
+.ctxmenu .item{
+  display:flex; align-items:center; gap:14px;
+  padding:4px 22px 4px 26px; cursor:pointer; white-space:nowrap;
+  position:relative;
+}
+.ctxmenu .item:hover{ background:var(--accent-dark); color:#fff; }
+.ctxmenu .item:hover .accel{ color:#dbe9f7; }
+.ctxmenu .accel{ margin-left:auto; color:var(--text-faint); font-size:11.5px; }
+.ctxmenu .sep{ height:1px; margin:3px 2px; background:var(--edge); }
+.ctxmenu .head{
+  padding:5px 10px 2px; color:var(--text-faint);
+  font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;
+}
+.ctxmenu .head:hover{ background:none; color:var(--text-faint); }
+
+/* ══════════ Vervollständigung ══════════ */
+
+.popup{
+  position:fixed; z-index:500; width:330px;
+  background:#ffffff; border:1px solid var(--edge-dark); border-radius:3px;
+  box-shadow:2px 3px 10px rgba(0,0,0,.3); overflow:hidden;
+}
+.popup input{
+  width:100%; background:#fff; border:0;
+  border-bottom:1px solid var(--edge); color:var(--text);
+  padding:5px 8px; font-family:var(--font-code); font-size:12.5px;
+}
+.popup input:focus{ outline:none; }
+.popup-list{ max-height:250px; overflow:auto; }
+.popup-item{ padding:4px 9px; cursor:pointer; display:flex; gap:10px; align-items:baseline; }
+.popup-item.sel{ background:var(--accent-dark); color:#fff; }
+.popup-item .o{ font-family:var(--font-code); color:var(--kw); font-weight:bold; }
+.popup-item.sel .o{ color:#fff; }
+.popup-item .d{ color:var(--text-dim); font-size:11.5px; margin-left:auto; }
+.popup-item.sel .d{ color:#dbe9f7; }
+
+/* ══════════ Dialog ══════════ */
+
+.modal-backdrop{
+  position:fixed; inset:0; z-index:600;
+  background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center;
+}
+.modal{
+  width:min(780px,92vw); max-height:86vh; display:flex; flex-direction:column;
+  background:var(--win); border:1px solid var(--edge-dark); border-radius:4px;
+  box-shadow:0 12px 40px rgba(0,0,0,.4);
+}
+.modal-head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:6px 10px; background:var(--win-dark); border-bottom:1px solid var(--edge);
+}
+.modal-body{ padding:14px 18px; overflow:auto; line-height:1.65; font-size:13px; background:#fff; }
+.modal-body h3{ font-size:13.5px; margin:16px 0 5px; color:#0b5fa5; }
+.modal-body h3:first-child{ margin-top:0; }
+.modal-body code{
+  font-family:var(--font-code); background:#fafafa; border:1px solid var(--edge);
+  padding:0 4px; border-radius:2px; color:var(--kw);
+}
+.modal-body pre{
+  font-family:var(--font-code); font-size:12px; background:#fff;
+  border:1px solid var(--edge); border-radius:2px; padding:9px 11px; overflow:auto;
+}
+.modal-body ul{ margin:5px 0 10px; padding-left:20px; }
+.modal-body li{ margin-bottom:3px; }
+table.docs{ border-collapse:collapse; width:100%; font-size:12px; }
+table.docs th, table.docs td{
+  border:1px solid var(--edge); padding:4px 7px; text-align:left; vertical-align:top;
+}
+table.docs th{ background:var(--win-dark); color:var(--text-dim); font-weight:600; }
+table.docs code{ font-family:var(--font-code); color:var(--kw); font-weight:bold; }
+
+</style>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128187;</text></svg>">
+</head>
+<body>
+
+<!-- ══════════ Tabs ══════════ -->
+<div class="tabbar" id="tabbar"></div>
+
+<!-- ══════════ Hauptbereich ══════════ -->
+<div class="main">
+  <!-- Editor -->
+  <div class="editor-col">
+    <div class="editor-wrap" id="editorWrap">
+      <div class="gutter" id="gutter"></div>
+      <div class="code-area">
+        <pre class="highlight" aria-hidden="true"><code id="highlightCode"></code></pre>
+        <textarea id="editor" spellcheck="false" autocapitalize="off" autocomplete="off"
+                  autocorrect="off" wrap="off" aria-label="Maschinencode-Editor"></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ Terminal ══════════ -->
+<div class="term-panel" id="simPanel">
+  <div class="term-head">
+    <span class="term-title">Terminal</span>
+    <button class="tbtn" data-action="run"   title="Simulation starten (F5)">▶ Start</button>
+    <button class="tbtn" data-action="step"  title="Einzelschritt (F10)">⏭ Schritt</button>
+    <button class="tbtn" data-action="reset" title="Zurücksetzen">⟲ Reset</button>
+    <label class="speed">Tempo
+      <input type="number" id="simSpeed" min="1" max="10000" step="10" value="100"
+             title="Millisekunden zwischen zwei Maschinenbefehlen">
+      <span>ms</span>
+    </label>
+    <span class="sim-status" id="simStatus">Bereit</span>
+    <span class="tb-spacer"></span>
+    <span class="term-err" id="termErr" hidden title="Klicken: zur ersten Fehlerstelle springen">0 Fehler</span>
+    <button class="tbtn" data-action="help" title="Anleitung & Befehlsübersicht (F1)">?</button>
+    <button class="tbtn" data-action="toggleSim" title="Terminal ein-/ausblenden">✕</button>
+  </div>
+
+  <div class="term-regs" id="termRegs"></div>
+  <div class="term-mem"  id="termMem"></div>
+
+  <div class="term-console" id="trace"></div>
+</div>
+
+<!-- ══════════ Statusleiste ══════════ -->
+<div class="statusbar">
+  <span id="stFile">Keine Datei</span>
+  <span class="st-sep"></span>
+  <span id="stPos">Ln: 1, Col: 1</span>
+  <span id="stSel">Sel: 0|0</span>
+  <span class="st-sep"></span>
+  <span id="stLines">lines: 1</span>
+  <span class="tb-spacer"></span>
+  <span id="stStatus" class="st-ok">Bereit</span>
+  <span class="st-sep"></span>
+  <span>Maschinencode</span>
+  <span class="st-sep"></span>
+  <span>UTF-8</span>
+  <span class="st-sep"></span>
+  <span>Unix (LF)</span>
+  <span class="st-sep"></span>
+  <span>INS</span>
+</div>
+
+<!-- ══════════ Such-/Ersetzleiste ══════════ -->
+<div class="findbar" id="findbar" hidden>
+  <input type="text" id="findInput" placeholder="Suchen…" spellcheck="false">
+  <input type="text" id="replaceInput" placeholder="Ersetzen mit…" spellcheck="false" hidden>
+  <button class="tbtn" data-action="findNext" title="Weitersuchen (F3)">▼ Nächster</button>
+  <button class="tbtn" data-action="findPrev" title="Rückwärts suchen (Umschalt+F3)">▲ Vorheriger</button>
+  <button class="tbtn" data-action="replaceOne" title="Ersetzen">Ersetzen</button>
+  <button class="tbtn" data-action="replaceAll" title="Alle ersetzen">Alle ersetzen</button>
+  <label class="chk"><input type="checkbox" id="optCase"> Groß/Klein</label>
+  <label class="chk"><input type="checkbox" id="optWord"> Wort</label>
+  <label class="chk"><input type="checkbox" id="optRegex"> Regex</label>
+  <button class="tbtn" data-action="closeFind">✕</button>
+</div>
+
+<!-- ══════════ Gehe-zu-Zeile ══════════ -->
+<div class="findbar goto" id="gotobar" hidden>
+  <span>Gehe zu Zeile:</span>
+  <input type="number" id="gotoInput" min="1" value="1">
+  <button class="tbtn" data-action="doGoto">OK</button>
+  <button class="tbtn" data-action="closeGoto">✕</button>
+</div>
+
+<!-- ══════════ Kontextmenü (Rechtsklick) ══════════ -->
+<div class="ctxmenu" id="ctxmenu" hidden></div>
+
+<!-- ══════════ Tab-Kontextmenü ══════════ -->
+<div class="ctxmenu" id="tabmenu" hidden></div>
+
+<!-- ══════════ Befehls-Vervollständigung ══════════ -->
+<div class="popup" id="popup" hidden>
+  <input type="text" id="popupInput" placeholder="Befehl…" spellcheck="false">
+  <div id="popupList" class="popup-list"></div>
+</div>
+
+<!-- ══════════ Hilfe-Dialog ══════════ -->
+<div class="modal-backdrop" id="helpModal" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <strong>Maschinencode-Editor — Hilfe</strong>
+      <button class="tbtn" data-action="closeHelp">✕</button>
+    </div>
+    <div class="modal-body" id="helpBody"></div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" multiple hidden accept=".mas,.txt,.asm,text/plain">
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   core.js — reine Logik des Maschinencode-Editors
+   Befehlssatz, Assembler (Prüfung) und Simulator.
+   Frei von DOM-Abhängigkeiten → in Node testbar.
+   ══════════════════════════════════════════════════════════════════ */
+(function (root) {
+'use strict';
+
+/* ────────── Befehlssatz (Definition 1.15 / 1.16) ────────── */
+
+const OPCODES = {
+  'INIT': {
+    sig: 'INIT A', name: 'Initialisierung', order: 1,
+    func: 'Speichert den Wert 0 an der Adresse A.',
+    detail: 'Damit werden lokale Variablen mit 0 initialisiert. Die 0 bringt der Befehl selbst mit – eine Konstante im Datenteil ist nicht nötig.',
+    eva: 'Ausgabe', dataOps: [0], example: 'INIT S2'
+  },
+  'ADD': {
+    sig: 'ADD A,B', name: 'Addition', order: 2,
+    func: 'Addiert zum Inhalt an Adresse A den Inhalt an Adresse B.',
+    detail: 'Das Ergebnis wird an A abgelegt und überschreibt den alten Inhalt von A. A ist damit gleichzeitig Quelle und Ziel. Über Addition von Konstanten lassen sich beliebige Werte erzeugen.',
+    eva: 'Eingabe · Verarbeitung · Ausgabe', dataOps: [0,1], example: 'ADD S2, S2'
+  },
+  'SUB': {
+    sig: 'SUB A,B', name: 'Subtraktion', order: 3,
+    func: 'Subtrahiert vom Inhalt an Adresse A den Inhalt an Adresse B.',
+    detail: 'Wie ADD ist A zugleich Quelle und Ziel. Der Vergleich zweier Werte (a == b) wird über SUB und anschließend SPRUNG0 realisiert.',
+    eva: 'Eingabe · Verarbeitung · Ausgabe', dataOps: [0,1], example: 'SUB S3, S2'
+  },
+  'DEKREMENT': {
+    sig: 'DEKREMENT A', name: 'Dekrement', order: 4,
+    func: 'Vermindert den Inhalt an Adresse A um 1.',
+    detail: 'Entspricht dem C-Operator --x auf einer Variable mit Adresse A.',
+    eva: 'Eingabe · Verarbeitung · Ausgabe', dataOps: [0], example: 'DEKREMENT S1'
+  },
+  'INKREMENT': {
+    sig: 'INKREMENT A', name: 'Inkrement', order: 5,
+    func: 'Erhöht den Inhalt an Adresse A um 1.',
+    detail: 'Entspricht dem C-Operator ++x auf einer Variable mit Adresse A.',
+    eva: 'Eingabe · Verarbeitung · Ausgabe', dataOps: [0], example: 'INKREMENT S2'
+  },
+  'SPRUNG': {
+    sig: 'SPRUNG P', name: 'Sprung', order: 6,
+    func: 'Springt zur Adresse P im Programmteil.',
+    detail: 'Unbedingter Sprung. Es gibt weder Eingabe- noch Ausgabedaten; der PC wird mit dem Sprungziel überschrieben. In Kombination mit einem bedingten Sprung realisiert er while-Schleifen.',
+    eva: 'Ausgabe (PC)', dataOps: [], example: 'SPRUNG P3'
+  },
+  'SPRUNG0': {
+    sig: 'SUNG0 P,A', name: 'Bedingter Sprung bei 0', order: 7,
+    func: 'Springt zu P, falls der Inhalt an Adresse A gleich 0 ist.',
+    detail: 'Bei Schleifen wird die Bedingung negiert: Man springt über den Schleifenrumpf, wenn die Abbruchbedingung erfüllt ist. Der Befehl bringt die 0 selbst mit.',
+    eva: 'Eingabe', dataOps: [1], example: 'SPRUNG0 P7, S1'
+  },
+  'SPRUNGNEG': {
+    sig: 'SPRUNGNEG P,A', name: 'Bedingter Sprung bei negativem Wert', order: 8,
+    func: 'Springt zu P, falls der Inhalt an Adresse A negativ ist.',
+    detail: 'Ermöglicht Abbruchbedingungen der Form "kleiner als 0" (z. B. bei Zählern mit Vorzeichen).',
+    eva: 'Eingabe', dataOps: [1], example: 'SPRUNGNEG P5, S3'
+  },
+  'RÜCKGABE': {
+    sig: 'RÜCKGABE A,B,C', name: 'Rückgabe', order: 9,
+    func: 'Entspricht der return-Anweisung in C.',
+    detail: 'Der Inhalt von A (berechneter Rückgabewert) wird nach B kopiert – B ist die Adresse des Rückgabewerts im Function Stack Frame. Anschließend wird zu der Adresse gesprungen, die in C steht (Rücksprungadresse). A wird gelesen, C wird gelesen, B ist Ziel der Ausgabe.',
+    eva: 'Eingabe · Verarbeitung · Ausgabe', dataOps: [0], example: 'RÜCKGABE S2'
+  }
+};
+/* Tippfehler in der Vorlage korrigieren */
+OPCODES['SPRUNG0'].sig = 'SPRUNG0 P,A';
+
+const OP_ALIASES = { 'RUECKGABE': 'RÜCKGABE' };
+const KEYWORDS = Object.keys(OPCODES).concat(Object.keys(OP_ALIASES));
+const ARITY = {
+  'INIT': [1], 'ADD': [2], 'SUB': [2], 'DEKREMENT': [1], 'INKREMENT': [1],
+  'SPRUNG': [1], 'SPRUNG0': [2], 'SPRUNGNEG': [2], 'RÜCKGABE': [1, 3]
+};
+
+/* ────────── Vorlagen ────────── */
+
+const TEMPLATES = [
+  { name: 'while-Schleife', text:
+    'SPRUNG0  {ENDE}, {BEDINGUNG}\n' +
+    '{KOERPER}\n' +
+    'SPRUNG  {START}' },
+  { name: 'if / else', text:
+    'SPRUNG0  {SONST}, {BEDINGUNG}\n' +
+    '{DANN}\n' +
+    'SPRUNG  {ENDE}\n' +
+    '{SONST}:\n' +
+    '{SONSTTEXT}' },
+  { name: 'Funktion mit Rückgabe', text:
+    'INIT      {ERGEBNIS}\n' +
+    '{RECHNUNG}\n' +
+    'RÜCKGABE  {ERGEBNIS}' }
+];
+
+/* ────────── Beispiele aus dem Skript (Kapitel 1.6) ────────── */
+
+const EXAMPLES = {
+  exp2:
+'# exp2(n) berechnet 2^n  (Pseudocode: Kapitel 1.6 des Skripts)\n' +
+'# Eingabeparameter n liegt in S1, die Ergebnisvariable e in S2.\n' +
+'\n' +
+'P1   INIT       S2          # e = 0\n' +
+'P2   INKREMENT  S2          # e = e + 1\n' +
+'P3   SPRUNG0    P7, S1      # while (n != 0)  ->  bei n == 0 zum Ende springen\n' +
+'P4   ADD        S2, S2      # e = e + e\n' +
+'P5   DEKREMENT  S1          # n = n - 1\n' +
+'P6   SPRUNG     P3          # Ende der Schleife\n' +
+'P7   RÜCKGABE   S2          # return e\n' +
+'\n' +
+'S1   2                      # n = 2   (Aufruf: exp2(2))\n' +
+'S2   0                      # e\n',
+
+  is_equal:
+'# is_equal(a, b) liefert 1, wenn a == b, sonst 0.\n' +
+'# Eingabeparameter a in S1, b in S2, Hilfsvariable c in S3.\n' +
+'\n' +
+'P1   INIT       S3          # c = 0\n' +
+'P2   ADD        S3, S1      # c = c + a\n' +
+'P3   SUB        S3, S2      # c = c - b\n' +
+'P4   SPRUNG0    P6, S3      # if (c != 0)  ->  bei c == 0 zu P6 springen\n' +
+'P5   RÜCKGABE   D1          # return 0\n' +
+'P6   RÜCKGABE   D2          # return 1\n' +
+'\n' +
+'D1   0                      # Konstante 0 (Datenteil)\n' +
+'D2   1                      # Konstante 1 (Datenteil)\n' +
+'S1   5                      # a = 5   (Aufruf: is_equal(5, 5))\n' +
+'S2   5                      # b = 5\n' +
+'S3   0                      # c\n'
+};
+
+/* ────────── Hilfsfunktionen ────────── */
+
+function normalizeOp(op){ const u = String(op).toUpperCase(); return OP_ALIASES[u] || u; }
+
+function stripComment(line){
+  const h = line.indexOf('#');
+  const s = line.indexOf('//');
+  let idx = -1;
+  if (h >= 0 && s >= 0) idx = Math.min(h, s);
+  else if (h >= 0) idx = h;
+  else if (s >= 0) idx = s;
+  return { code: idx >= 0 ? line.slice(0, idx) : line,
+           comment: idx >= 0 ? line.slice(idx) : '' };
+}
+
+function addrNum(a){
+  const m = /^([PDSH])(\d+)$/i.exec(String(a).trim());
+  return m ? parseInt(m[2], 10) : null;
+}
+function isAddr(a){ return addrNum(a) !== null; }
+function isProgAddr(a){ return /^P\d+$/i.test(String(a).trim()); }
+
+/* ══════════════════════════════════════════════════════
+   Assembler: zerlegt ein Programm, vergibt Adressen und
+   meldet Fehler und Warnungen.
+   ══════════════════════════════════════════════════════ */
+
+function assemble(text){
+  const problems = [];
+  const entries = [];
+  const explicitP = new Set();
+
+  const lines = String(text).split('\n');
+  lines.forEach((raw, i) => {
+    const lineNo = i + 1;
+    const { code } = stripComment(raw);
+    const trimmed = code.trim();
+    if (!trimmed){ entries.push({ kind: 'blank', line: lineNo, raw }); return; }
+
+    const tokens = trimmed.replace(/,/g, ' ').split(/\s+/).filter(Boolean);
+    let label = null, rest = tokens;
+    if (/^[PDSH]\d+$/i.test(tokens[0])){ label = tokens[0].toUpperCase(); rest = tokens.slice(1); }
+
+    const op = rest.length ? normalizeOp(rest[0]) : null;
+    if (op && OPCODES[op]){
+      const e = { kind: 'instr', line: lineNo, label, op, ops: rest.slice(1), raw };
+      entries.push(e);
+      if (label && isProgAddr(label)) explicitP.add(addrNum(label));
+    } else if (label){
+      entries.push({ kind: 'data', line: lineNo, label, valueTok: rest.length ? rest.join(' ') : '0', raw });
+    } else {
+      problems.push({ sev: 'error', line: lineNo, msg: 'Zeile kann nicht gelesen werden: "' + trimmed + '"' });
+      entries.push({ kind: 'bad', line: lineNo, raw });
+    }
+  });
+
+  /* Adressen vergeben */
+  const used = new Set();
+  const dataLabels = new Set();
+  const initTargets = new Set();
+  const prog = new Map(), data = new Map(), dataSym = new Map();
+  let auto = 1;
+
+  for (const e of entries){
+    if (e.kind === 'instr'){
+      if (e.label){
+        if (used.has(e.label))
+          problems.push({ sev: 'error', line: e.line, msg: 'Adresse ' + e.label + ' ist mehrfach vergeben.' });
+        used.add(e.label);
+        e.addr = e.label;
+      } else {
+        while (explicitP.has(auto) || used.has('P' + auto)) auto++;
+        e.addr = 'P' + auto; used.add(e.addr); auto++;
+        e.auto = true;
+      }
+      prog.set(e.addr, e);
+    } else if (e.kind === 'data'){
+      if (used.has(e.label))
+        problems.push({ sev: 'error', line: e.line, msg: 'Adresse ' + e.label + ' ist mehrfach vergeben.' });
+      used.add(e.label);
+      dataLabels.add(e.label);
+      e.addr = e.label;
+      const v = String(e.valueTok).trim();
+      if (/^-?\d+$/.test(v)){
+        data.set(e.addr, parseInt(v, 10));
+        if (isProgAddr(e.label))
+          problems.push({ sev: 'error', line: e.line,
+            msg: 'P-Adressen (' + e.label + ') sind für Befehle reserviert.' });
+      } else if (isAddr(v)){
+        data.set(e.addr, addrNum(v));
+        dataSym.set(e.addr, v.toUpperCase());
+        if (isProgAddr(e.label))
+          problems.push({ sev: 'error', line: e.line,
+            msg: 'P-Adressen (' + e.label + ') sind für Befehle reserviert.' });
+      } else if (isProgAddr(e.label)){
+        problems.push({ sev: 'error', line: e.line,
+          msg: 'Unbekannter Befehl "' + v.split(/\s+/)[0] + '" – eine P-Adresse kann nur einen Befehl enthalten.' });
+      } else {
+        problems.push({ sev: 'error', line: e.line, msg: 'Wert "' + v + '" ist keine Zahl.' });
+      }
+    }
+  }
+
+  /* Befehlsbezogene Prüfungen */
+  for (const e of entries){
+    if (e.kind === 'instr' && e.op === 'INIT' && e.ops.length && isAddr(e.ops[0]))
+      initTargets.add(e.ops[0].toUpperCase());
+  }
+  for (const e of entries){
+    if (e.kind !== 'instr') continue;
+    const ar = ARITY[e.op];
+    if (!ar.includes(e.ops.length)){
+      problems.push({ sev: 'error', line: e.line,
+        msg: e.op + ' erwartet ' + ar.join(' oder ') + ' Operanden, gefunden ' + e.ops.length + '.' });
+    }
+    e.ops.forEach(o => {
+      if (!isAddr(o))
+        problems.push({ sev: 'error', line: e.line,
+          msg: '"' + o + '" ist keine gültige Adresse (erwartet P…, D…, S… oder H…).' });
+    });
+    if (e.op === 'SPRUNG' || e.op === 'SPRUNG0' || e.op === 'SPRUNGNEG'){
+      const t = e.ops[0] ? e.ops[0].toUpperCase() : '';
+      if (t && !isProgAddr(t))
+        problems.push({ sev: 'error', line: e.line, msg: 'Sprungziel muss eine P-Adresse sein (gefunden "' + t + '").' });
+      else if (t && !prog.has(t))
+        problems.push({ sev: 'error', line: e.line, msg: 'Sprungziel ' + t + ' enthält keinen Befehl.' });
+    }
+    /* Datenadressen: Warnung, wenn eine Adresse weder durch eine Datenzeile
+       noch durch einen INIT-Befehl initialisiert wird.                        */
+    for (const idx of (OPCODES[e.op].dataOps || [])){
+      if (idx >= e.ops.length) continue;
+      const o = e.ops[idx].toUpperCase();
+      if (!isAddr(o)) continue;
+      if (dataLabels.has(o) || initTargets.has(o)) continue;
+      problems.push({ sev: 'warn', line: e.line,
+        msg: 'Adresse ' + o + ' wird nie initialisiert (Standardwert 0).' });
+    }
+  }
+
+  let maxProg = 0, start = null;
+  prog.forEach((e, a) => {
+    const n = addrNum(a);
+    if (n > maxProg) maxProg = n;
+    if (start === null || n < addrNum(start)) start = a;
+  });
+
+  return { prog, data, dataSym, problems, entries, maxProg, start: start || 'P1' };
+}
+
+/* ══════════════════════════════════════════════════════
+   Simulator
+   ══════════════════════════════════════════════════════ */
+
+function createSim(asm){
+  return {
+    prog: asm.prog,
+    data: new Map(asm.data),
+    dataSym: new Map(asm.dataSym),
+    pc: addrNum(asm.start) || 1,
+    maxProg: asm.maxProg,
+    steps: 0, halted: false, error: null, result: null,
+    regs: { PC: null, IR: null, AM: null, RM: null, WM: null, AR: null },
+    trace: []
+  };
+}
+
+function simMem(sim, addr){ return sim.data.has(addr) ? sim.data.get(addr) : 0; }
+
+function simTrace(sim, cls, text){
+  sim.trace.push({ cls, text });
+  if (sim.trace.length > 800) sim.trace.shift();
+}
+
+/* Führt einen FDEW-Zyklus aus. hooks: {trace, halt, error} */
+function simStep(sim, hooks){
+  hooks = hooks || {};
+  if (sim.halted) return false;
+
+  const addr = 'P' + sim.pc;
+  const ins = sim.prog.get(addr);
+  if (!ins){
+    if (sim.pc > sim.maxProg){
+      sim.halted = true;
+      if (hooks.halt) hooks.halt('Programmlende erreicht (kein RÜCKGABE).');
+      return false;
+    }
+    sim.halted = true; sim.error = 'Kein Befehl an ' + addr;
+    if (hooks.error) hooks.error(sim.error);
+    return false;
+  }
+
+  sim.steps++;
+  sim.regs.AM = addr;
+  sim.regs.IR = ins.op + (ins.ops.length ? '  ' + ins.ops.join(', ') : '');
+  sim.pc++;
+  simTrace(sim, 'f', 'Fetch:    "' + ins.op + (ins.ops.length ? ' ' + ins.ops.join(', ') : '') +
+                   '" aus ' + addr + ' nach IR, PC → ' + sim.pc);
+
+  const ops = ins.ops.map(o => o.toUpperCase());
+  const A = ops[0], B = ops[1], C = ops[2];
+
+  switch (ins.op){
+    case 'INIT': {
+      sim.regs.AR = 0;
+      simTrace(sim, 'x', 'Decode:   (E) entfällt – der Befehl bringt die 0 mit');
+      simTrace(sim, 'e', 'Execute:  (V) Initialisierung liefert 0');
+      sim.data.set(A, 0);
+      sim.regs.AM = A; sim.regs.WM = 0;
+      simTrace(sim, 'w', 'Write-Back: 0 → ' + A);
+      break;
+    }
+    case 'ADD': {
+      const v1 = simMem(sim, A), v2 = simMem(sim, B);
+      sim.regs.RM = v1 + ' / ' + v2;
+      simTrace(sim, 'x', 'Decode:   (E) Eingabe: ' + A + '=' + v1 + ', ' + B + '=' + v2);
+      const res = v1 + v2;
+      sim.regs.AR = res;
+      simTrace(sim, 'e', 'Execute:  (V) ' + v1 + ' + ' + v2 + ' = ' + res);
+      sim.data.set(A, res);
+      sim.regs.AM = A; sim.regs.WM = res;
+      simTrace(sim, 'w', 'Write-Back: ' + res + ' → ' + A);
+      break;
+    }
+    case 'SUB': {
+      const v1 = simMem(sim, A), v2 = simMem(sim, B);
+      sim.regs.RM = v1 + ' / ' + v2;
+      simTrace(sim, 'x', 'Decode:   (E) Eingabe: ' + A + '=' + v1 + ', ' + B + '=' + v2);
+      const res = v1 - v2;
+      sim.regs.AR = res;
+      simTrace(sim, 'e', 'Execute:  (V) ' + v1 + ' − ' + v2 + ' = ' + res);
+      sim.data.set(A, res);
+      sim.regs.AM = A; sim.regs.WM = res;
+      simTrace(sim, 'w', 'Write-Back: ' + res + ' → ' + A);
+      break;
+    }
+    case 'DEKREMENT':
+    case 'INKREMENT': {
+      const v = simMem(sim, A);
+      sim.regs.RM = v;
+      simTrace(sim, 'x', 'Decode:   (E) Eingabe: ' + A + '=' + v);
+      const res = ins.op === 'INKREMENT' ? v + 1 : v - 1;
+      sim.regs.AR = res;
+      simTrace(sim, 'e', 'Execute:  (V) ' + v + (ins.op === 'INKREMENT' ? ' + 1 = ' : ' − 1 = ') + res);
+      sim.data.set(A, res);
+      sim.regs.AM = A; sim.regs.WM = res;
+      simTrace(sim, 'w', 'Write-Back: ' + res + ' → ' + A);
+      break;
+    }
+    case 'SPRUNG': {
+      simTrace(sim, 'x', 'Decode:   (E) entfällt');
+      const target = addrNum(A) || 0;
+      simTrace(sim, 'e', 'Execute:  (V) Sprung → ' + A + ' (PC überschrieben)');
+      sim.pc = target;
+      simTrace(sim, 'w', 'Write-Back: entfällt');
+      break;
+    }
+    case 'SPRUNG0':
+    case 'SPRUNGNEG': {
+      const v = simMem(sim, B);
+      sim.regs.RM = v;
+      simTrace(sim, 'x', 'Decode:   (E) Eingabe: ' + B + '=' + v);
+      const hit = ins.op === 'SPRUNG0' ? (v === 0) : (v < 0);
+      if (hit){
+        simTrace(sim, 'e', 'Execute:  (V) Bedingung erfüllt → Sprung nach ' + A);
+        sim.pc = addrNum(A) || 0;
+      } else {
+        simTrace(sim, 'e', 'Execute:  (V) Bedingung nicht erfüllt → kein Sprung, weiter bei P' + sim.pc);
+      }
+      simTrace(sim, 'w', 'Write-Back: entfällt');
+      break;
+    }
+    case 'RÜCKGABE': {
+      const val = simMem(sim, A);
+      sim.regs.RM = val;
+      simTrace(sim, 'x', 'Decode:   (E) Eingabe: ' + A + '=' + val);
+      if (ops.length === 3){
+        const slot = B;
+        const retSym = sim.dataSym.has(C) ? sim.dataSym.get(C) : null;
+        const retNum = retSym ? addrNum(retSym) : simMem(sim, C);
+        sim.regs.AR = val;
+        simTrace(sim, 'e', 'Execute:  (V) Rückgabewert ' + val + ' → ' + slot +
+                        ', Rücksprungadresse aus ' + C + ' = ' + (retSym || retNum));
+        sim.data.set(slot, val);
+        sim.regs.AM = slot; sim.regs.WM = val;
+        simTrace(sim, 'w', 'Write-Back: ' + val + ' → ' + slot);
+        sim.pc = retNum || 0;
+      } else {
+        sim.regs.AR = val;
+        simTrace(sim, 'e', 'Execute:  (V) Rückgabewert ' + val + ' – Programmende');
+        sim.result = val;
+        simTrace(sim, 'w', 'Write-Back: entfällt');
+        sim.halted = true;
+      }
+      break;
+    }
+  }
+
+  if (sim.halted && sim.result !== null && hooks.halt)
+    hooks.halt('Beendet – Rückgabewert: ' + sim.result);
+
+  return !sim.halted;
+}
+
+root.MC = {
+  OPCODES, OP_ALIASES, KEYWORDS, ARITY, TEMPLATES, EXAMPLES,
+  normalizeOp, stripComment, addrNum, isAddr, isProgAddr,
+  assemble, createSim, simStep
+};
+
+/* auch unter Node require() nutzbar */
+if (typeof module !== 'undefined' && module.exports) module.exports = root.MC;
+
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   Maschinencode-Editor  ·  app.js
+   Editor für den Maschinensatz aus "Informatik 1 – Kapitel 1:
+   Rechnerarchitektur und -organisation" (Prof. Stückler, Univ. Augsburg)
+   Die reine Logik (Befehlssatz, Assembler, Simulator) liegt in core.js.
+   ══════════════════════════════════════════════════════════════════ */
+(function () {
+'use strict';
+
+const MC = window.MC;
+const { OPCODES, KEYWORDS, TEMPLATES } = MC;
+const { assemble, createSim, simStep, addrNum } = MC;
+
+/* ══════════ 1 · Hilfsfunktionen ══════════ */
+
+const $  = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+
+function esc(s){
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+/* ══════════ 2 · DOM-Knoten ══════════ */
+
+const editor        = $('#editor');
+const highlightCode = $('#highlightCode');
+const gutter        = $('#gutter');
+const traceEl       = $('#trace');
+
+/* ══════════ 3 · Zustand ══════════ */
+
+const state = {
+  tabs: [], activeId: null, seq: 0, unnamed: 0,
+  zoom: 100, simOpen: true,
+  find: { term: '', index: -1, caseSens: false, wholeWord: false, regex: false },
+  problems: [], assembly: null,
+  checks: []            /* Prüfmeldungen im Terminal */
+};
+
+const sim = { inner: null, running: false, timer: null, delay: 100, stale: true };
+
+/* Wrapper um den Simulationszustand des Kerns */
+const S = {
+  get prog(){ return sim.inner ? sim.inner.prog : new Map(); },
+  get data(){ return sim.inner ? sim.inner.data : new Map(); },
+  get pc(){ return sim.inner ? sim.inner.pc : 0; },
+  get maxProg(){ return sim.inner ? sim.inner.maxProg : 0; },
+  get steps(){ return sim.inner ? sim.inner.steps : 0; },
+  get halted(){ return sim.inner ? sim.inner.halted : true; },
+  get error(){ return sim.inner ? sim.inner.error : null; },
+  get result(){ return sim.inner ? sim.inner.result : null; },
+  get regs(){ return sim.inner ? sim.inner.regs : {}; },
+  get trace(){ return sim.inner ? sim.inner.trace : []; },
+  get delay(){ return sim.delay; }
+};
+
+const TRACE_CLS = { f: 'tr-fetch', x: 'tr-dec', e: 'tr-exec', w: 'tr-wb' };
+
+/* ══════════ 4 · Tabs ══════════ */
+
+function activeTab(){ return state.tabs.find(t => t.id === state.activeId) || null; }
+
+function addTab(name, content, handle){
+  const tab = { id: ++state.seq, name: name || 'Unbenannt', content: content || '',
+                dirty: false, handle: handle || null, scrollTop: 0 };
+  state.tabs.push(tab);
+  state.activeId = tab.id;
+  editor.value = tab.content;
+  editor.scrollTop = 0;
+  renderTabs(); render(); scheduleValidate();
+  return tab;
+}
+
+function closeTab(id){
+  const i = state.tabs.findIndex(t => t.id === id);
+  if (i < 0) return;
+  const tab = state.tabs[i];
+  if (tab.dirty && !confirm('"' + tab.name + '" wurde geändert. Wirklich schließen?')) return;
+  state.tabs.splice(i, 1);
+  if (!state.tabs.length){ addTab('Unbenannt1', ''); return; }
+  if (state.activeId === id){
+    const next = state.tabs[Math.min(i, state.tabs.length - 1)];
+    state.activeId = next.id;
+    editor.value = next.content;
+    editor.scrollTop = next.scrollTop || 0;
+  }
+  renderTabs(); render(); scheduleValidate();
+}
+
+function switchTab(id){
+  const cur = activeTab();
+  if (cur) cur.content = editor.value;
+  const next = state.tabs.find(t => t.id === id);
+  if (!next) return;
+  state.activeId = id;
+  editor.value = next.content;
+  editor.scrollTop = next.scrollTop || 0;
+  renderTabs(); render(); scheduleValidate();
+}
+
+function renderTabs(){
+  $('#tabbar').innerHTML = state.tabs.map(t =>
+    '<div class="tab' + (t.id === state.activeId ? ' active' : '') + (t.dirty ? ' dirty' : '') +
+    '" data-tab="' + t.id + '" title="' + esc(t.name) + '">' +
+    '<span class="ico"></span><span class="name">' + esc(t.name) + '</span>' +
+    '<span class="close" data-close="' + t.id + '">✕</span></div>').join('') +
+    '<button class="tab-new" data-action="new" title="Neuer Tab (Strg+N)">+</button>';
+}
+
+/* Tab anlegen – Name "Unbenannt1", "Unbenannt2", … */
+function newTab(){
+  state.unnamed++;
+  return addTab('Unbenannt' + state.unnamed, '');
+}
+
+/* Tab umbenennen (inline) */
+function startRename(tabId){
+  const tab = state.tabs.find(t => t.id === tabId);
+  if (!tab) return;
+  const nameEl = $('#tabbar .tab[data-tab="' + tabId + '"] .name');
+  if (!nameEl) return;
+  const input = document.createElement('input');
+  input.className = 'rename';
+  input.value = tab.name;
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const commit = (ok) => {
+    if (done) return;
+    done = true;
+    if (ok){
+      const v = input.value.trim();
+      if (v) tab.name = v;
+    }
+    renderTabs();
+  };
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter'){ e.preventDefault(); commit(true); }
+    else if (e.key === 'Escape'){ e.preventDefault(); commit(false); }
+  });
+  input.addEventListener('blur', () => commit(true));
+}
+
+/* Tabwechsel per Tastatur */
+function cycleTab(dir){
+  if (state.tabs.length < 2) return;
+  const i = state.tabs.findIndex(t => t.id === state.activeId);
+  const next = (i + dir + state.tabs.length) % state.tabs.length;
+  switchTab(state.tabs[next].id);
+}
+
+/* ══════════ 5 · Syntaxhervorhebung ══════════ */
+
+/* disjunkte Bereiche {s,e,cls} */
+function syntaxRanges(text){
+  const ranges = [];
+  const lines = text.split('\n');
+  let offset = 0;
+  for (const line of lines){
+    const cut = MC.stripComment(line);
+    if (cut.comment){
+      ranges.push({ s: offset + cut.code.length, e: offset + line.length, cls: 'cmt' });
+    }
+    const re = /([PDSH]\d+)|([A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß0-9_]*)|(-?\d+)/g;
+    const toks = [];
+    let m;
+    while ((m = re.exec(cut.code)) !== null)
+      toks.push({ s: m.index, e: m.index + m[0].length, txt: m[0],
+                  kind: m[1] ? 'a' : m[2] ? 'w' : 'n' });
+    for (let i = 0; i < toks.length; i++){
+      const t = toks[i];
+      let cls;
+      if (t.kind === 'a') cls = 'addr';
+      else if (t.kind === 'n') cls = 'num';
+      else cls = KEYWORDS.includes(t.txt.toUpperCase()) ? 'kw' : 'id';
+      /* erste Adresse gefolgt von einem Befehl = Adress-Label */
+      if (i === 0 && t.kind === 'a' && toks[1] && toks[1].kind === 'w' &&
+          KEYWORDS.includes(toks[1].txt.toUpperCase())) cls = 'lbl';
+      ranges.push({ s: offset + t.s, e: offset + t.e, cls });
+    }
+    offset += line.length + 1;
+  }
+  return ranges;
+}
+
+function classAt(ranges, pos){
+  for (const r of ranges) if (pos >= r.s && pos < r.e) return r.cls;
+  return null;
+}
+
+/* vereint Syntaxbereiche, Suchtreffer und Textauswahl */
+function renderHighlight(text, markRanges, sel){
+  const sr = syntaxRanges(text);
+  const bounds = new Set([0, text.length]);
+  sr.forEach(r => { bounds.add(r.s); bounds.add(r.e); });
+  markRanges.forEach(r => { bounds.add(r.s); bounds.add(r.e); });
+  if (sel){ bounds.add(sel.s); bounds.add(sel.e); }
+  const pts = Array.from(bounds).sort((a, b) => a - b);
+  let out = '', bgOpen = false, bgCls = null;
+  for (let i = 0; i < pts.length - 1; i++){
+    const a = pts[i], b = pts[i + 1];
+    if (a === b) continue;
+    const cls = classAt(sr, a);
+    const marked = markRanges.some(r => a >= r.s && a < r.e);
+    const inSel = !!(sel && a >= sel.s && a < sel.e);
+    const want = inSel ? (marked ? 'selmark' : 'sel') : (marked ? 'mark' : null);
+    if (want !== bgCls){
+      if (bgCls) out += '</span>';
+      if (want) out += '<span class="' + want + '">';
+      bgCls = want; bgOpen = !!want;
+    }
+    const seg = esc(text.slice(a, b));
+    out += cls ? '<span class="' + cls + '">' + seg + '</span>' : seg;
+  }
+  if (bgCls) out += '</span>';
+  return out;
+}
+
+/* Gutter: Zeilennummern + Markerspalte für Fehler (Notepad++-Stil) */
+function renderGutter(text, curLine){
+  const n = text.split('\n').length;
+  const marks = new Map();
+  state.problems.forEach(p => { if (!marks.has(p.line)) marks.set(p.line, p.sev); });
+  let html = '';
+  for (let i = 1; i <= n; i++){
+    const sev = marks.get(i);
+    html += '<div class="ln' + (i === curLine ? ' cur' : '') + '">' +
+            '<span class="mk' + (sev ? ' ' + sev : '') + '">' + (sev ? '<i></i>' : '') + '</span>' +
+            i + '</div>';
+  }
+  gutter.innerHTML = html;
+}
+
+function currentLine(){
+  return editor.value.slice(0, editor.selectionStart).split('\n').length;
+}
+
+/* Die Textauswahl wird im Overlay gezeichnet, damit sie genau auf der
+   Textzeile liegt. Die native Auswahl der Textarea ist unsichtbar. */
+let lastSel = { s: -1, e: -1 };
+
+function selectionRange(){
+  const s = editor.selectionStart, e = editor.selectionEnd;
+  return (s !== e) ? { s, e } : null;
+}
+
+function onSelectionChange(){
+  const s = editor.selectionStart, e = editor.selectionEnd;
+  if (s === lastSel.s && e === lastSel.e) return;
+  lastSel = { s, e };
+  render();
+}
+
+function render(){
+  const text = editor.value;
+  const marks = state.find.term ? findMatches(state.find.term) : [];
+  const sel = selectionRange();
+  let html = renderHighlight(text, marks, sel);
+  if (text.endsWith('\n')) html = html.slice(0, -1) + '\n ';
+  highlightCode.innerHTML = html;
+  renderGutter(text, currentLine());
+  updateStatus();
+}
+
+function syncScroll(){
+  highlightCode.parentElement.scrollTop  = editor.scrollTop;
+  highlightCode.parentElement.scrollLeft = editor.scrollLeft;
+  gutter.scrollTop = editor.scrollTop;
+}
+
+/* ══════════ 6 · Suchen & Ersetzen ══════════ */
+
+function findMatches(term){
+  const text = editor.value;
+  if (!term) return [];
+  const out = [];
+  let re;
+  try {
+    if (state.find.regex) re = new RegExp(term, state.find.caseSens ? 'g' : 'gi');
+    else {
+      const escd = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const body = state.find.wholeWord ? '\\b' + escd + '\\b' : escd;
+      re = new RegExp(body, state.find.caseSens ? 'g' : 'gi');
+    }
+  } catch (e){ return []; }
+  let m;
+  while ((m = re.exec(text)) !== null){
+    if (m[0].length === 0){ re.lastIndex++; continue; }
+    out.push({ s: m.index, e: m.index + m[0].length });
+    if (out.length > 5000) break;
+  }
+  return out;
+}
+
+function gotoMatch(dir){
+  const ms = findMatches(state.find.term);
+  if (!ms.length){ setStatus('Kein Treffer', 'st-warn'); return; }
+  if (state.find.index < 0) state.find.index = dir < 0 ? ms.length - 1 : 0;
+  else state.find.index = (state.find.index + dir + ms.length) % ms.length;
+  const m = ms[state.find.index];
+  editor.focus();
+  editor.setSelectionRange(m.s, m.e);
+  scrollToPos(m.s);
+  render();
+  setStatus('Treffer ' + (state.find.index + 1) + ' von ' + ms.length);
+}
+
+function scrollToPos(pos){
+  const line = editor.value.slice(0, pos).split('\n').length - 1;
+  const lh = parseFloat(getComputedStyle(editor).lineHeight) || 21;
+  editor.scrollTop = Math.max(0, line * lh - editor.clientHeight / 3);
+}
+
+/* ══════════ 7 · Editorereignisse ══════════ */
+
+function replaceSelection(text){
+  editor.focus();
+  let ok = false;
+  try { ok = document.execCommand('insertText', false, text); } catch (e){ ok = false; }
+  if (!ok){
+    const s = editor.selectionStart, e = editor.selectionEnd;
+    editor.value = editor.value.slice(0, s) + text + editor.value.slice(e);
+    editor.selectionStart = editor.selectionEnd = s + text.length;
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+}
+
+function insertAtCursor(text){ replaceSelection(text); }
+
+editor.addEventListener('input', () => {
+  const t = activeTab();
+  if (t){ t.content = editor.value; t.dirty = true; renderTabs(); }
+  sim.stale = true;
+  render();
+  scheduleValidate();
+});
+editor.addEventListener('scroll', syncScroll);
+editor.addEventListener('keyup', onSelectionChange);
+editor.addEventListener('click', onSelectionChange);
+editor.addEventListener('select', onSelectionChange);
+editor.addEventListener('mouseup', onSelectionChange);
+editor.addEventListener('dblclick', onSelectionChange);
+document.addEventListener('selectionchange', onSelectionChange);
+
+editor.addEventListener('keydown', (e) => {
+  const meta = e.ctrlKey || e.metaKey;
+
+  if (e.key === 'Tab'){
+    e.preventDefault();
+    const s = editor.selectionStart, en = editor.selectionEnd;
+    if (s !== en && editor.value.slice(s, en).includes('\n')){
+      const startLine = editor.value.lastIndexOf('\n', s - 1) + 1;
+      const endLine = editor.value.indexOf('\n', en);
+      const block = editor.value.slice(startLine, endLine < 0 ? editor.value.length : endLine);
+      const mod = block.split('\n')
+        .map(l => e.shiftKey ? l.replace(/^[ \t]{1,4}/, '') : '    ' + l).join('\n');
+      replaceSelection(mod);
+    } else if (e.shiftKey){
+      const ls = editor.value.lastIndexOf('\n', s - 1) + 1;
+      const chunk = editor.value.slice(ls, s);
+      const trimmed = chunk.replace(/[ \t]{1,4}$/, '');
+      replaceSelection(trimmed);
+      editor.selectionStart = editor.selectionEnd = ls + trimmed.length;
+    } else {
+      replaceSelection('    ');
+    }
+    return;
+  }
+
+  if (e.key === 'Enter'){
+    const s = editor.selectionStart;
+    const ls = editor.value.lastIndexOf('\n', s - 1) + 1;
+    const indent = (editor.value.slice(ls, s).match(/^[ \t]*/) || [''])[0];
+    if (indent){ e.preventDefault(); replaceSelection('\n' + indent); }
+    return;
+  }
+
+  if (e.key === ' ' && meta && !e.shiftKey){ e.preventDefault(); openPopup(); return; }
+  if (e.key === 'Escape'){ closePopup(); closeCtx(); return; }
+});
+
+/* Rechtsklick = Kontextmenü (anstelle der Menüleiste) */
+editor.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  openCtx(e.clientX, e.clientY);
+});
+
+/* ══════════ 8 · Statusleiste ══════════ */
+
+function updateStatus(){
+  const pos = editor.selectionStart;
+  const before = editor.value.slice(0, pos);
+  const line = before.split('\n').length;
+  const col = pos - before.lastIndexOf('\n');
+  $('#stPos').textContent = 'Ln: ' + line + ', Col: ' + col;
+  const selLen = editor.selectionEnd - editor.selectionStart;
+  const endCol = editor.selectionEnd - editor.value.slice(0, editor.selectionEnd).lastIndexOf('\n');
+  $('#stSel').textContent = 'Sel: ' + selLen + '|' + endCol;
+  $('#stLines').textContent = 'lines: ' + editor.value.split('\n').length;
+  const t = activeTab();
+  $('#stFile').textContent = t ? t.name + (t.dirty ? ' *' : '') : 'Keine Datei';
+}
+
+function setStatus(msg, cls){
+  const el = $('#stStatus');
+  el.textContent = msg;
+  el.className = cls || '';
+}
+
+/* ══════════ 9 · Prüfung ══════════ */
+
+let validateTimer = null;
+function scheduleValidate(){
+  clearTimeout(validateTimer);
+  validateTimer = setTimeout(validate, 220);
+}
+
+function validate(){
+  const asm = assemble(editor.value);
+  state.assembly = asm;
+  state.problems = asm.problems;
+
+  /* Prüfmeldungen ins Terminal schreiben */
+  state.checks = asm.problems.map(p => ({
+    sev: p.sev,
+    text: (p.sev === 'error' ? 'Fehler  Z' + p.line + ': ' : 'Warnung Z' + p.line + ': ') + p.msg
+  }));
+  if (!state.checks.length)
+    state.checks = [{ sev: 'info', text: 'Prüfung: keine Fehler, keine Warnungen.' }];
+
+  const errs = asm.problems.filter(p => p.sev === 'error').length;
+  const warns = asm.problems.length - errs;
+  const chip = $('#termErr');
+  chip.hidden = errs === 0;
+  chip.className = 'term-err' + (errs ? '' : ' warn');
+  chip.textContent = errs ? errs + ' Fehler' : warns + ' Warnungen';
+
+  renderGutter(editor.value, currentLine());
+  renderTerm();
+  sim.stale = true;
+  setStatus(asm.problems.length ? (errs ? errs + ' Fehler' : warns + ' Warnungen') : 'Bereit',
+            errs ? 'st-err' : (warns ? 'st-warn' : 'st-ok'));
+  if (sim.running && errs) stopSim('Programm enthält Fehler – Simulation angehalten.');
+}
+
+/* ══════════ 10 · Simulator ══════════ */
+
+function resetSim(keepTrace){
+  const asm = assemble(editor.value);
+  state.assembly = asm;
+  const old = sim.inner;
+  sim.inner = createSim(asm);
+  if (keepTrace && old) sim.inner.trace = old.trace;
+  sim.stale = false;
+  renderTerm();
+}
+
+function ensureSim(){
+  if (sim.stale || !sim.inner) resetSim(true);
+}
+
+const simHooks = {
+  halt(msg){ stopSim(msg, 'halt'); },
+  error(msg){ stopSim(msg, 'err'); }
+};
+
+function doStep(){
+  ensureSim();
+  if (sim.inner.halted) return false;
+  const cont = simStep(sim.inner, simHooks);
+  renderTerm();
+  if (!cont && sim.inner.halted && sim.inner.error) stopSim(sim.inner.error, 'err');
+  return cont;
+}
+
+function startSim(){
+  const asm = assemble(editor.value);
+  state.assembly = asm;
+  const errs = asm.problems.filter(p => p.sev === 'error');
+  if (errs.length){
+    setStatus(errs.length + ' Fehler – Simulation nicht startbar', 'st-err');
+    return;
+  }
+  resetSim(false);
+  openSim();
+  sim.running = true;
+  updateSimStatus('Läuft', 'run');
+  scheduleSim();
+}
+
+function stopSim(msg, kind){
+  sim.running = false;
+  if (sim.timer){ clearInterval(sim.timer); sim.timer = null; }
+  if (msg) updateSimStatus(msg, kind || 'halt');
+  renderTerm();
+}
+
+function scheduleSim(){
+  if (sim.timer) clearInterval(sim.timer);
+  /* sim.delay = Millisekunden zwischen zwei Maschinenbefehlen */
+  const delay = Math.max(1, sim.delay || 1);
+  sim.timer = setInterval(() => {
+    if (!sim.running) return;
+    if (!doStep()) return;
+    if (sim.steps > 500000) stopSim('Abbruch: zu viele Schritte (Endlosschleife?).', 'err');
+  }, delay);
+}
+
+function updateSimStatus(text, cls){
+  const el = $('#simStatus');
+  el.textContent = text;
+  el.className = 'sim-status ' + (cls || '');
+}
+
+/* ══════════ 11 · Terminal ══════════ */
+
+function renderTerm(){
+  const r = S.regs;
+  const regs = [
+    ['PC',   S.halted ? '–' : 'P' + S.pc],
+    ['IR',   r.IR || '–'],
+    ['AM',   r.AM || '–'],
+    ['RM',   r.RM === null || r.RM === undefined ? '–' : r.RM],
+    ['WM',   r.WM === null || r.WM === undefined ? '–' : r.WM],
+    ['AR',   r.AR === null || r.AR === undefined ? '–' : r.AR],
+    ['Schritte', S.steps]
+  ];
+  $('#termRegs').innerHTML = regs
+    .map(x => x[0] + ' <b>' + esc(String(x[1])) + '</b>').join('');
+
+  const asm = state.assembly;
+  let mem = '';
+  if (asm){
+    const keys = Array.from(asm.data.keys()).sort((a, b) => a.localeCompare(b));
+    mem = keys.map(k => {
+      const base = asm.data.get(k);
+      const live = S.data.has(k) ? S.data.get(k) : base;
+      const chg = S.data.has(k) && S.data.get(k) !== base;
+      return k + ' <span class="' + (chg ? 'chg' : 'v') + '">' + esc(String(live)) + '</span>';
+    }).join('   ');
+  }
+  $('#termMem').innerHTML = mem ? '<span>Speicher:</span> ' + mem : '';
+  renderConsole();
+}
+
+function renderConsole(){
+  let html = '';
+  for (const c of state.checks){
+    const cls = c.sev === 'error' ? 'tr-err' : c.sev === 'warn' ? 'tr-warn' : 'tr-hint';
+    html += '<div class="' + cls + '">' + esc(c.text) + '</div>';
+  }
+  for (const t of S.trace){
+    html += '<div class="' + (TRACE_CLS[t.cls] || 'tr-exec') + '">' + esc(t.text) + '</div>';
+  }
+  const atBottom = traceEl.scrollTop + traceEl.clientHeight >= traceEl.scrollHeight - 30;
+  traceEl.innerHTML = html;
+  if (atBottom) traceEl.scrollTop = traceEl.scrollHeight;
+}
+
+/* ══════════ 12 · Suchleiste / Popup / Dialog ══════════ */
+
+function openFind(withReplace){
+  $('#findbar').hidden = false;
+  $('#replaceInput').hidden = !withReplace;
+  $('#findInput').focus();
+  $('#findInput').select();
+}
+function closeFind(){
+  $('#findbar').hidden = true;
+  state.find.term = '';
+  state.find.index = -1;
+  render();
+  editor.focus();
+}
+function openGoto(){
+  $('#gotobar').hidden = false;
+  $('#gotoInput').focus();
+  $('#gotoInput').select();
+}
+function closeGoto(){ $('#gotobar').hidden = true; editor.focus(); }
+
+let popupItems = [], popupSel = 0;
+
+function openPopup(){
+  const pop = $('#popup');
+  pop.hidden = false;
+  $('#popupInput').value = '';
+  filterPopup();
+  const c = caretCoords();
+  const rect = $('#editorWrap').getBoundingClientRect();
+  pop.style.left = Math.min(c.left + rect.left, window.innerWidth - 340) + 'px';
+  pop.style.top  = Math.min(c.top + c.height + rect.top, window.innerHeight - 300) + 'px';
+  $('#popupInput').focus();
+}
+function closePopup(){ $('#popup').hidden = true; }
+
+function filterPopup(){
+  const q = $('#popupInput').value.trim().toUpperCase();
+  popupItems = [];
+  Object.keys(OPCODES).sort((a, b) => OPCODES[a].order - OPCODES[b].order).forEach(op => {
+    if (!q || op.indexOf(q) === 0 || OPCODES[op].name.toUpperCase().indexOf(q) >= 0)
+      popupItems.push({ label: op, desc: OPCODES[op].name, kind: 'op', text: op + '  ' });
+  });
+  TEMPLATES.forEach(t => {
+    if (!q || t.name.toUpperCase().indexOf(q) >= 0)
+      popupItems.push({ label: '⧉ ' + t.name, desc: 'Vorlage', kind: 'tpl', text: t.text });
+  });
+  popupSel = 0;
+  renderPopup();
+}
+
+function renderPopup(){
+  $('#popupList').innerHTML = popupItems.map((it, i) =>
+    '<div class="popup-item' + (i === popupSel ? ' sel' : '') + '" data-pi="' + i + '">' +
+    '<span class="o">' + esc(it.label) + '</span><span class="d">' + esc(it.desc) + '</span></div>').join('');
+}
+
+function acceptPopup(){
+  const it = popupItems[popupSel];
+  if (!it) return;
+  if (it.kind === 'op'){
+    insertAtCursor(it.text);
+  } else {
+    insertAtCursor(it.text);
+    const pos = editor.selectionStart;
+    const idx = editor.value.indexOf('{', pos - it.text.length);
+    if (idx >= 0){
+      const end = editor.value.indexOf('}', idx);
+      editor.focus();
+      editor.setSelectionRange(idx + 1, end);
+    }
+  }
+  closePopup();
+  editor.focus();
+}
+
+function caretCoords(){
+  const div = document.createElement('div');
+  const cs = getComputedStyle(editor);
+  ['fontFamily','fontSize','fontWeight','lineHeight','letterSpacing','tabSize',
+   'paddingTop','paddingRight','paddingBottom','paddingLeft','borderTopWidth',
+   'borderRightWidth','borderBottomWidth','borderLeftWidth','boxSizing','whiteSpace']
+    .forEach(p => { div.style[p] = cs[p]; });
+  div.style.position = 'absolute';
+  div.style.visibility = 'hidden';
+  div.style.left = '-9999px';
+  div.style.top = '0';
+  div.style.width = editor.clientWidth + 'px';
+  div.textContent = editor.value.substring(0, editor.selectionStart);
+  const span = document.createElement('span');
+  span.textContent = editor.value.substring(editor.selectionStart) || '.';
+  div.appendChild(span);
+  document.body.appendChild(div);
+  const coords = { top: span.offsetTop, left: span.offsetLeft, height: span.offsetHeight || 21 };
+  document.body.removeChild(div);
+  return coords;
+}
+
+function openHelp(){
+  const rows = Object.keys(OPCODES).sort((a, b) => OPCODES[a].order - OPCODES[b].order)
+    .map(op => '<tr><td><code>' + esc(OPCODES[op].sig) + '</code></td><td>' +
+               esc(OPCODES[op].func) + '</td><td>' + esc(OPCODES[op].eva) + '</td></tr>').join('');
+  $('#helpBody').innerHTML =
+    '<h3>Bedienung</h3>' +
+    '<p>Es gibt bewusst <b>keine Menüleiste</b> – alle Funktionen sind über <b>Rechtsklick</b> ' +
+    'im Editor oder über die Tastenkürzel erreichbar. <code>Strg+Leertaste</code> vervollständigt ' +
+    'Befehle, <code>F1</code> öffnet diese Hilfe, <code>F5</code> startet die Simulation.</p>' +
+    '<h3>Schreiben von Maschinenprogrammen</h3>' +
+    '<p>Jede Zeile besteht aus einer optionalen <b>Adresse</b>, dem <b>Befehl</b> und den Operanden. ' +
+    'Adressen: <code>P…</code> Programmteil, <code>D…</code> Datenteil, <code>S…</code> Stack, <code>H…</code> Heap.</p>' +
+    '<pre>P1   INIT       S2          # e = 0\n' +
+    'P2   SPRUNG0     P7, S1      # while (n != 0)\n' +
+    'P4   ADD         S2, S2      # e = e + e\n' +
+    'P6   SPRUNG      P2\n' +
+    'P7   RÜCKGABE    S2          # return e\n' +
+    '\n' +
+    'S1   2                      # n = 2\n' +
+    'S2   0</pre>' +
+    '<ul>' +
+    '<li>Kommentare beginnen mit <code>#</code> oder <code>//</code> und gelten bis zum Zeilenende.</li>' +
+    '<li>Ohne Adresse notierte Befehle erhalten automatisch die nächste freie <code>P</code>-Adresse.</li>' +
+    '<li>Datenzeilen (Adresse + Wert) legen Speicherzellen im Datenbereich an.</li>' +
+    '<li>Fehler und Warnungen stehen im Terminal und sind im Gutter markiert.</li>' +
+    '</ul>' +
+    '<h3>Befehlssatz</h3>' +
+    '<table class="docs"><tr><th>Befehl</th><th>Funktion</th><th>EVA</th></tr>' + rows + '</table>' +
+    '<h3>Simulation</h3>' +
+    '<p>Die Simulation bildet den FDEW-Zyklus ab: <b>F</b>etch, <b>D</b>ecode (Eingabe), ' +
+    '<b>E</b>xecute (Verarbeitung), <b>W</b>rite-Back (Ausgabe). Das Terminal zeigt jeden Schritt, ' +
+    'darüber Register (PC, IR, AM, RM, WM, AR) und Speicher.</p>' +
+    '<ul>' +
+    '<li><code>RÜCKGABE A</code> beendet das Programm und liefert den Inhalt von A als Rückgabewert.</li>' +
+    '<li><code>RÜCKGABE A,B,C</code> kopiert A nach B und springt zu der Adresse, die in C steht ' +
+    '(C enthält die Nummer des Sprungziels, z. B. 7 für P7).</li>' +
+    '<li>Ein fehlender <code>RÜCKGABE</code> beendet das Programm nach dem letzten Befehl.</li>' +
+    '</ul>' +
+    '<h3>Tastenkürzel</h3>' +
+    '<table class="docs">' +
+    '<tr><td><code>Strg+N/O/S/Shift+S/W</code></td><td>Neu / Öffnen / Speichern / Speichern unter / Tab schließen</td></tr>' +
+    '<tr><td><code>Strg+F/H/G, F3</code></td><td>Suchen / Ersetzen / Gehe zu Zeile / Weitersuchen</td></tr>' +
+    '<tr><td><code>Strg+/</code></td><td>Kommentar umschalten</td></tr>' +
+    '<tr><td><code>Tab / Shift+Tab</code></td><td>Einrücken / Ausrücken</td></tr>' +
+    '<tr><td><code>Strg+Leertaste</code></td><td>Befehlsvervollständigung</td></tr>' +
+    '<tr><td><code>Strg++/-/0</code></td><td>Zoom</td></tr>' +
+    '<tr><td><code>F5 / F10 / F1</code></td><td>Simulation starten / Einzelschritt / Hilfe</td></tr>' +
+    '</table>' +
+    '<h3>Hinweis zum Skript</h3>' +
+    '<p>Das Skript definiert <code>RÜCKGABE</code> in Definition 1.15 mit drei Adressen (A,B,C), führt es in den ' +
+    'Beispielprogrammen in Kapitel 1.6 aber mit nur einer Adresse aus. Der Editor beherrscht beide Formen.</p>';
+  $('#helpModal').hidden = false;
+}
+function closeHelp(){ $('#helpModal').hidden = true; }
+
+/* ══════════ 13 · Kontextmenü ══════════ */
+
+const CTX_MENU = [
+  { head: 'Datei' },
+  { label: 'Neu', accel: 'Strg+N', act: 'new' },
+  { label: 'Öffnen…', accel: 'Strg+O', act: 'open' },
+  { label: 'Speichern', accel: 'Strg+S', act: 'save' },
+  { label: 'Speichern unter…', accel: 'Strg+Shift+S', act: 'saveAs' },
+  { label: 'Tab schließen', accel: 'Strg+W', act: 'closeTab' },
+  { sep: true },
+  { head: 'Bearbeiten' },
+  { label: 'Rückgängig', accel: 'Strg+Z', act: 'undo' },
+  { label: 'Wiederholen', accel: 'Strg+Y', act: 'redo' },
+  { label: 'Ausschneiden', accel: 'Strg+X', act: 'cut' },
+  { label: 'Kopieren', accel: 'Strg+C', act: 'copy' },
+  { label: 'Einfügen', accel: 'Strg+V', act: 'paste' },
+  { label: 'Alles auswählen', accel: 'Strg+A', act: 'selectAll' },
+  { label: 'Kommentar umschalten', accel: 'Strg+/', act: 'comment' },
+  { label: 'Einrücken', accel: 'Tab', act: 'indent' },
+  { label: 'Ausrücken', accel: 'Shift+Tab', act: 'outdent' },
+  { sep: true },
+  { head: 'Suchen' },
+  { label: 'Suchen…', accel: 'Strg+F', act: 'find' },
+  { label: 'Ersetzen…', accel: 'Strg+H', act: 'replace' },
+  { label: 'Gehe zu Zeile…', accel: 'Strg+G', act: 'goto' },
+  { sep: true },
+  { head: 'Ausführen' },
+  { label: 'Simulation starten', accel: 'F5', act: 'run' },
+  { label: 'Einzelschritt', accel: 'F10', act: 'step' },
+  { label: 'Zurücksetzen', act: 'reset' },
+  { sep: true },
+  { head: 'Ansicht' },
+  { label: 'Terminal ein-/ausblenden', act: 'toggleSim' },
+  { label: 'Zoomen', accel: 'Strg++', act: 'zoomIn' },
+  { label: 'Verkleinern', accel: 'Strg+-', act: 'zoomOut' },
+  { label: 'Zoom 100 %', act: 'zoomReset' },
+  { label: 'Zeilenumbruch', act: 'toggleWrap' },
+  { sep: true },
+  { head: 'Hilfe' },
+  { label: 'Anleitung & Befehlsübersicht', accel: 'F1', act: 'help' }
+];
+
+function openCtx(x, y){
+  const m = $('#ctxmenu');
+  m.innerHTML = CTX_MENU.map(it => it.sep ? '<div class="sep"></div>'
+    : it.head ? '<div class="item head">' + esc(it.head) + '</div>'
+    : '<div class="item" data-act="' + esc(it.act) + '"><span>' + esc(it.label) +
+      '</span><span class="accel">' + esc(it.accel || '') + '</span></div>').join('');
+  m.hidden = false;
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.min(x, window.innerWidth - r.width - 4) + 'px';
+  m.style.top  = Math.min(y, window.innerHeight - r.height - 4) + 'px';
+}
+function closeCtx(){ $('#ctxmenu').hidden = true; }
+
+/* Kontextmenü eines Tabs */
+const TAB_MENU = [
+  { label: 'Umbenennen…', accel: 'F2', act: 'renameTab' },
+  { label: 'Speichern', accel: 'Strg+S', act: 'save' },
+  { sep: true },
+  { label: 'Schließen', accel: 'Strg+W', act: 'closeTab' },
+  { label: 'Andere schließen', act: 'closeOthers' },
+  { label: 'Alle schließen', act: 'closeAll' },
+  { sep: true },
+  { label: 'Neuer Tab', accel: 'Strg+N', act: 'new' }
+];
+
+let tabMenuTarget = null;
+
+function openTabMenu(x, y, tabId){
+  tabMenuTarget = tabId;
+  const m = $('#tabmenu');
+  m.innerHTML = TAB_MENU.map(it => it.sep ? '<div class="sep"></div>'
+    : '<div class="item" data-act="' + esc(it.act) + '"><span>' + esc(it.label) +
+      '</span><span class="accel">' + esc(it.accel || '') + '</span></div>').join('');
+  m.hidden = false;
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.min(x, window.innerWidth - r.width - 4) + 'px';
+  m.style.top  = Math.min(y, window.innerHeight - r.height - 4) + 'px';
+}
+function closeTabMenu(){ $('#tabmenu').hidden = true; tabMenuTarget = null; }
+
+/* ══════════ 14 · Dateien ══════════ */
+
+async function openFiles(){
+  if (window.showOpenFilePicker){
+    try {
+      const handles = await window.showOpenFilePicker({ multiple: true,
+        types: [{ description: 'Maschinenprogramme',
+                  accept: { 'text/plain': ['.mas', '.txt', '.asm'] } }] });
+      for (const h of handles){
+        const file = await h.getFile();
+        addTab(file.name, await file.text(), h);
+      }
+      return;
+    } catch (e){ if (e && e.name === 'AbortError') return; }
+  }
+  $('#fileInput').click();
+}
+
+async function saveFile(saveAs){
+  const tab = activeTab();
+  if (!tab) return;
+  if (saveAs || !tab.handle){
+    if (window.showSaveFilePicker){
+      try {
+        const h = await window.showSaveFilePicker({ suggestedName: tab.name,
+          types: [{ description: 'Maschinenprogramme', accept: { 'text/plain': ['.mas', '.txt'] } }] });
+        const w = await h.createWritable();
+        await w.write(tab.content); await w.close();
+        tab.handle = h; tab.name = h.name; tab.dirty = false;
+        renderTabs(); updateStatus();
+        setStatus('Gespeichert: ' + tab.name, 'st-ok');
+        return;
+      } catch (e){ if (e && e.name === 'AbortError') return; }
+    }
+    const blob = new Blob([tab.content], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = tab.name.endsWith('.mas') ? tab.name : tab.name + '.mas';
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    tab.dirty = false; renderTabs(); updateStatus();
+    setStatus('Heruntergeladen: ' + a.download, 'st-ok');
+    return;
+  }
+  const w = await tab.handle.createWritable();
+  await w.write(tab.content); await w.close();
+  tab.dirty = false; renderTabs(); updateStatus();
+  setStatus('Gespeichert: ' + tab.name, 'st-ok');
+}
+
+/* ══════════ 15 · Aktionen ══════════ */
+
+function toggleComment(){
+  const s = editor.selectionStart, e = editor.selectionEnd;
+  const ls = editor.value.lastIndexOf('\n', s - 1) + 1;
+  const le = editor.value.indexOf('\n', e);
+  const end = le < 0 ? editor.value.length : le;
+  const lines = editor.value.slice(ls, end).split('\n');
+  const allCommented = lines.every(l => !l.trim() || /^\s*#/.test(l));
+  const out = lines.map(l => {
+    if (!l.trim()) return l;
+    if (allCommented) return l.replace(/^(\s*)#\s?/, '$1');
+    const ind = (l.match(/^\s*/) || [''])[0];
+    return ind + '# ' + l.slice(ind.length);
+  }).join('\n');
+  editor.focus();
+  editor.setSelectionRange(ls, ls + out.length);
+  replaceSelection(out);
+}
+
+function indentSel(dir){
+  const s = editor.selectionStart, e = editor.selectionEnd;
+  const ls = editor.value.lastIndexOf('\n', s - 1) + 1;
+  const le = editor.value.indexOf('\n', e);
+  const end = le < 0 ? editor.value.length : le;
+  const block = editor.value.slice(ls, end);
+  const out = block.split('\n')
+    .map(l => dir > 0 ? '    ' + l : l.replace(/^[ \t]{1,4}/, '')).join('\n');
+  editor.focus();
+  editor.setSelectionRange(ls, ls + out.length);
+  replaceSelection(out);
+}
+
+function setZoom(z){
+  state.zoom = Math.max(50, Math.min(250, z));
+  document.documentElement.style.setProperty('--code-size', (14 * state.zoom / 100).toFixed(1) + 'px');
+  render();
+}
+
+function replaceOne(){
+  const term = state.find.term;
+  if (!term) return;
+  const ms = findMatches(term);
+  if (!ms.length) return;
+  const sel = editor.selectionStart, selEnd = editor.selectionEnd;
+  let m = ms.find(x => x.s === sel && x.e === selEnd);
+  if (!m) m = ms.find(x => x.s >= sel) || ms[0];
+  editor.focus();
+  editor.setSelectionRange(m.s, m.e);
+  replaceSelection($('#replaceInput').value);
+  state.find.index = -1;
+  render();
+}
+
+function replaceAll(){
+  const term = state.find.term;
+  if (!term) return;
+  const ms = findMatches(term);
+  if (!ms.length) return;
+  const rep = $('#replaceInput').value;
+  let out = '', last = 0;
+  for (const m of ms){ out += editor.value.slice(last, m.s) + rep; last = m.e; }
+  out += editor.value.slice(last);
+  editor.focus();
+  editor.setSelectionRange(0, editor.value.length);
+  replaceSelection(out);
+  state.find.index = -1;
+  render();
+  setStatus(ms.length + ' Treffer ersetzt', 'st-ok');
+}
+
+function jumpToFirstProblem(){
+  const p = state.problems[0];
+  if (!p) return;
+  const lines = editor.value.split('\n');
+  let pos = 0;
+  for (let i = 0; i < p.line - 1; i++) pos += lines[i].length + 1;
+  editor.focus();
+  editor.setSelectionRange(pos, pos + (lines[p.line - 1] || '').length);
+  scrollToPos(pos);
+}
+
+const ACTIONS = {
+  new(){ newTab(); },
+  open(){ openFiles(); },
+  save(){ saveFile(false); },
+  saveAs(){ saveFile(true); },
+  closeTab(){ closeTab(state.activeId); },
+  closeAll(){
+    if (!confirm('Alle Tabs schließen?')) return;
+    state.tabs = []; state.unnamed = 0; newTab();
+  },
+  undo(){ editor.focus(); document.execCommand('undo'); },
+  redo(){ editor.focus(); document.execCommand('redo'); },
+  cut(){ editor.focus(); document.execCommand('cut'); },
+  copy(){ editor.focus(); document.execCommand('copy'); },
+  paste(){ editor.focus(); document.execCommand('paste'); },
+  delete(){ replaceSelection(''); },
+  selectAll(){ editor.focus(); editor.select(); },
+  comment(){ toggleComment(); },
+  indent(){ indentSel(1); },
+  outdent(){ indentSel(-1); },
+  find(){ openFind(false); },
+  replace(){ openFind(true); },
+  findNext(){ gotoMatch(1); },
+  findPrev(){ gotoMatch(-1); },
+  goto(){ openGoto(); },
+  doGoto(){
+    const n = parseInt($('#gotoInput').value, 10);
+    if (!n){ closeGoto(); return; }
+    const lines = editor.value.split('\n');
+    const idx = Math.min(Math.max(1, n), lines.length) - 1;
+    let pos = 0;
+    for (let i = 0; i < idx; i++) pos += lines[i].length + 1;
+    editor.focus();
+    editor.setSelectionRange(pos, pos + lines[idx].length);
+    scrollToPos(pos);
+    closeGoto();
+  },
+  toggleSim(){
+    state.simOpen = !state.simOpen;
+    $('#simPanel').classList.toggle('hidden', !state.simOpen);
+  },
+  zoomIn(){ setZoom(state.zoom + 10); },
+  zoomOut(){ setZoom(state.zoom - 10); },
+  zoomReset(){ setZoom(100); },
+  toggleWrap(){ editor.classList.toggle('wrap'); },
+  run(){ startSim(); },
+  step(){ openSim(); doStep(); },
+  reset(){ resetSim(false); updateSimStatus('Bereit', ''); },
+  clearTrace(){ if (sim.inner) sim.inner.trace = []; renderConsole(); },
+  revalidate(){ validate(); },
+  help(){ openHelp(); },
+  closeHelp(){ closeHelp(); },
+  closeFind(){ closeFind(); },
+  closeGoto(){ closeGoto(); },
+  replaceOne(){ replaceOne(); },
+  replaceAll(){ replaceAll(); },
+  jumpError(){ jumpToFirstProblem(); },
+  renameTab(){ if (tabMenuTarget !== null) startRename(tabMenuTarget); },
+  closeOthers(){
+    if (tabMenuTarget === null) return;
+    const keep = state.tabs.find(t => t.id === tabMenuTarget);
+    const others = state.tabs.filter(t => t.id !== tabMenuTarget);
+    if (others.some(t => t.dirty) && !confirm('Ungespeicherte Änderungen verwerfen?')) return;
+    state.tabs = keep ? [keep] : [];
+    state.activeId = keep ? keep.id : null;
+    if (!keep) newTab();
+    renderTabs(); render(); scheduleValidate();
+  },
+  about(){
+    alert('Maschinencode-Editor\n\n' +
+      'Editor für den Maschinensatz aus "Informatik 1 – Kapitel 1:\n' +
+      'Rechnerarchitektur und -organisation" (Prof. Stückler, Universität Augsburg).');
+  }
+};
+
+function doAction(act){
+  const fn = ACTIONS[act];
+  if (fn) fn();
+}
+
+function openSim(){
+  if (!state.simOpen){ state.simOpen = true; $('#simPanel').classList.remove('hidden'); }
+}
+
+/* ══════════ 16 · Verdrahtung ══════════ */
+
+document.addEventListener('click', (e) => {
+  const titem = e.target.closest('#tabmenu .item[data-act]');
+  if (titem){ doAction(titem.dataset.act); closeTabMenu(); return; }
+  closeTabMenu();
+
+  const item = e.target.closest('.ctxmenu .item[data-act]');
+  if (item){ doAction(item.dataset.act); closeCtx(); return; }
+  closeCtx();
+
+  const btn = e.target.closest('.tbtn[data-action], .tab-new[data-action]');
+  if (btn){ doAction(btn.dataset.action); return; }
+
+  if (e.target.closest('#termErr')){ jumpToFirstProblem(); return; }
+
+  const pitem = e.target.closest('.popup-item');
+  if (pitem){ popupSel = parseInt(pitem.dataset.pi, 10); acceptPopup(); return; }
+
+  const tab = e.target.closest('.tab');
+  if (tab){
+    const close = e.target.closest('.close');
+    if (close) closeTab(parseInt(close.dataset.close, 10));
+    else switchTab(parseInt(tab.dataset.tab, 10));
+    return;
+  }
+});
+
+/* Tab-Rechtsklick und Mittelklick */
+$('#tabbar').addEventListener('contextmenu', (e) => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  e.preventDefault();
+  openTabMenu(e.clientX, e.clientY, parseInt(tab.dataset.tab, 10));
+});
+$('#tabbar').addEventListener('auxclick', (e) => {
+  if (e.button !== 1) return;
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  e.preventDefault();
+  closeTab(parseInt(tab.dataset.tab, 10));
+});
+
+$('#findInput').addEventListener('input', () => {
+  state.find.term = $('#findInput').value;
+  state.find.index = -1;
+  state.find.caseSens = $('#optCase').checked;
+  state.find.wholeWord = $('#optWord').checked;
+  state.find.regex = $('#optRegex').checked;
+  render();
+});
+['optCase','optWord','optRegex'].forEach(id => $('#' + id).addEventListener('change', () => {
+  state.find.caseSens = $('#optCase').checked;
+  state.find.wholeWord = $('#optWord').checked;
+  state.find.regex = $('#optRegex').checked;
+  state.find.index = -1;
+  render();
+}));
+$('#findInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter'){ e.preventDefault(); gotoMatch(e.shiftKey ? -1 : 1); }
+});
+$('#replaceInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter'){ e.preventDefault(); replaceOne(); }
+});
+$('#gotoInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter'){ e.preventDefault(); doAction('doGoto'); }
+});
+
+$('#popupInput').addEventListener('input', filterPopup);
+$('#popupInput').addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown'){ e.preventDefault(); popupSel = Math.min(popupSel + 1, popupItems.length - 1); renderPopup(); }
+  else if (e.key === 'ArrowUp'){ e.preventDefault(); popupSel = Math.max(popupSel - 1, 0); renderPopup(); }
+  else if (e.key === 'Enter' || e.key === 'Tab'){ e.preventDefault(); acceptPopup(); }
+  else if (e.key === 'Escape'){ closePopup(); editor.focus(); }
+});
+
+$('#simSpeed').addEventListener('input', (e) => {
+  const v = parseInt(e.target.value, 10);
+  sim.delay = isNaN(v) ? 100 : Math.max(1, Math.min(10000, v));
+  if (sim.running) scheduleSim();   /* laufende Simulation mit neuem Tempo fortsetzen */
+});
+
+$('#fileInput').addEventListener('change', async (e) => {
+  for (const f of e.target.files) addTab(f.name, await f.text());
+  e.target.value = '';
+});
+
+document.addEventListener('keydown', (e) => {
+  const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+  const meta = e.ctrlKey || e.metaKey;
+
+  if (e.key === 'F1'){ e.preventDefault(); openHelp(); return; }
+  if (e.key === 'F5'){ e.preventDefault(); startSim(); return; }
+  if (e.key === 'F10'){ e.preventDefault(); doAction('step'); return; }
+  if (e.key === 'F3' && !inField){ e.preventDefault(); gotoMatch(e.shiftKey ? -1 : 1); return; }
+
+  /* Tabwechsel */
+  if (e.key === 'PageDown' && meta){ e.preventDefault(); cycleTab(1); return; }
+  if (e.key === 'PageUp' && meta){ e.preventDefault(); cycleTab(-1); return; }
+  if (e.altKey && !meta && /^[1-9]$/.test(e.key)){
+    const t = state.tabs[parseInt(e.key, 10) - 1];
+    if (t){ e.preventDefault(); switchTab(t.id); }
+    return;
+  }
+  if (e.key === 'F2' && !inField){ e.preventDefault(); startRename(state.activeId); return; }
+
+  if (meta){
+    const k = e.key.toLowerCase();
+    if (k === 's'){ e.preventDefault(); saveFile(e.shiftKey); return; }
+    if (k === 'o'){ e.preventDefault(); openFiles(); return; }
+    if (k === 'n'){ e.preventDefault(); ACTIONS.new(); return; }
+    if (k === 'w'){ e.preventDefault(); closeTab(state.activeId); return; }
+    if (k === 'f'){ e.preventDefault(); openFind(false); return; }
+    if (k === 'h'){ e.preventDefault(); openFind(true); return; }
+    if (k === 'g'){ e.preventDefault(); openGoto(); return; }
+    if (k === '/' ){ e.preventDefault(); toggleComment(); return; }
+    if (e.key === '=' || e.key === '+'){ e.preventDefault(); setZoom(state.zoom + 10); return; }
+    if (e.key === '-'){ e.preventDefault(); setZoom(state.zoom - 10); return; }
+    if (e.key === '0'){ e.preventDefault(); setZoom(100); return; }
+  }
+});
+
+/* ══════════ 17 · Start ══════════ */
+
+/* Testhaken – wird von test/ui-smoke.js benutzt. */
+window.MCEDITOR = {
+  state, sim: S,
+  validate, render,
+  setText(v){
+    editor.value = v;
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    validate();
+  }
+};
+
+state.unnamed = 1;
+addTab('Unbenannt1', '');
+setZoom(100);
+validate();
+updateSimStatus('Bereit', '');
+window.addEventListener('resize', render);
+
+})();
+
+</script>
+</body>
+</html>
